@@ -26,6 +26,7 @@
         android:layout_below="@id/saveid"
         android:background="@drawable/bg_popup_menu">
         <ImageButton
+            android:id="@+id/copy_token_btn"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:tint="@color/colorButtonText"

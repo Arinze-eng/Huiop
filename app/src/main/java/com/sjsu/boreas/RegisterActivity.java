@@ -29,10 +29,14 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import android.content.ClipData;
+import android.content.ClipboardManager;
 
 import com.sjsu.boreas.Database.LocalDatabaseReference;
 import com.sjsu.boreas.Database.LoggedInUser.LoggedInUser;
@@ -214,17 +218,16 @@ public class RegisterActivity extends AppCompatActivity implements LocationListe
     }
 
     private void showLoading(){
-        Log.e(TAG, SUB_TAG + "Showing the token dialog box");
-        Log.e(TAG, SUB_TAG + "new acct got created");
-        // inflate the layout of the popup window
+        Log.e(TAG, SUB_TAG + "Showing the loading dialog box");
         LayoutInflater inflater = (LayoutInflater)
                 getSystemService(LAYOUT_INFLATER_SERVICE);
         final View popupView = inflater.inflate(R.layout.popup_loading, null);
-        // create the popup window
+
         Point size = new Point();
         getWindowManager().getDefaultDisplay().getSize(size);
         int width = size.x-60;
         int height = LinearLayout.LayoutParams.WRAP_CONTENT;
+
         mPopupWindow = new PopupWindow(popupView, width, height, false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             mPopupWindow.setElevation(12);
@@ -234,6 +237,65 @@ public class RegisterActivity extends AppCompatActivity implements LocationListe
                 mPopupWindow.showAtLocation(findViewById(R.id.register_main), Gravity.CENTER, 0, 0);
             }
         });
+    }
+
+    private void showUserIdPopup(final LoggedInUser myUser){
+        try {
+            LayoutInflater inflater = (LayoutInflater) getSystemService(LAYOUT_INFLATER_SERVICE);
+            final View popupView = inflater.inflate(R.layout.popup_userid, null);
+
+            Point size = new Point();
+            getWindowManager().getDefaultDisplay().getSize(size);
+            int width = size.x-60;
+            int height = LinearLayout.LayoutParams.WRAP_CONTENT;
+
+            final PopupWindow tokenPopup = new PopupWindow(popupView, width, height, true);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                tokenPopup.setElevation(12);
+            }
+
+            final TextView tokenText = popupView.findViewById(R.id.user_token);
+            tokenText.setText(myUser.getUid());
+
+            ImageButton copyBtn = popupView.findViewById(R.id.copy_token_btn);
+            copyBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (clipboard != null) {
+                        clipboard.setPrimaryClip(ClipData.newPlainText("User ID", myUser.getUid()));
+                        Toast.makeText(RegisterActivity.this, "User ID copied", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+
+            Button okBtn = popupView.findViewById(R.id.userid_popup_button);
+            okBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    tokenPopup.dismiss();
+                    if(mPopupWindow != null) mPopupWindow.dismiss();
+
+                    if (MainActivity.nearbyConnectionHandler == null)
+                        MainActivity.nearbyConnectionHandler = new com.sjsu.boreas.OfflineConnectionHandlers.NearbyConnectionHandler(RegisterActivity.this);
+
+                    android.content.Intent intent = new android.content.Intent(RegisterActivity.this, LandingPage.class);
+                    intent.putExtra("currentUser", myUser);
+                    startActivity(intent);
+                    finish();
+                }
+            });
+
+            findViewById(R.id.register_main).post(new Runnable() {
+                @Override
+                public void run() {
+                    tokenPopup.showAtLocation(findViewById(R.id.register_main), Gravity.CENTER, 0, 0);
+                }
+            });
+
+        } catch (Exception e) {
+            Log.e(TAG, SUB_TAG + "Failed to show user id popup", e);
+        }
     }
 
     @Override
@@ -320,16 +382,18 @@ public class RegisterActivity extends AppCompatActivity implements LocationListe
         String publicKey = keys[1], privateKey = keys[0];
 
         final LoggedInUser myUser = new LoggedInUser(uniqueId, name, location.getLatitude(), location.getLongitude(), hashedPassword, publicKey, privateKey);
+
+        // Save locally right away so app can proceed even if the network is flaky.
         localDatabaseReference.registerUser(myUser);
+
+        // Push to Supabase (async). If this fails, the user can still use offline mode.
         FirebaseController.pushNewUserToFIrebase(myUser, this);
 
         Log.e(TAG, SUB_TAG+"User: " + myUser);
-        System.out.println(myUser);
 
-
-//        localDatabaseReference.wipeAllPreviousUserData();
-        MainActivity.context.onActivityResult(0, MainActivity.REGISTER_ACTIVITY_DONE_CODE, null);
-        if(mPopupWindow!=null)  mPopupWindow.dismiss();
+        // IMPORTANT UX: the user MUST see/save the generated user id/token.
+        // Also auto-log them in to avoid confusion.
+        showUserIdPopup(myUser);
     }
 
 

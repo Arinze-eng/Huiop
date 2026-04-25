@@ -138,7 +138,8 @@ public class FirebaseController {
 
                 @Override
                 public void onResponse(Call call, Response response) throws IOException {
-                    Log.e(TAG, SUB_TAG + "Register user response: " + response.code());
+                    String raw = response.body() != null ? response.body().string() : "";
+                    Log.e(TAG, SUB_TAG + "Register user response: " + response.code() + " raw=" + raw);
                     response.close();
                 }
             });
